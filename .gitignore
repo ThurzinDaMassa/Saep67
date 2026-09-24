@@ -1,0 +1,10 @@
+.idea/
+tmp/
+**/build/
+*.class
+*.log
+.env
+.env.*
+*.local
+SAEP_Gestao_Estoque.zip
+

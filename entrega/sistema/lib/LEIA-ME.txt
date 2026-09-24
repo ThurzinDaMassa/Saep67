@@ -1,0 +1,2 @@
+O driver mariadb-java-client-3.5.7.jar está nesta pasta.
+O run.ps1 usa este JAR. O Gradle também pode baixar a mesma dependência.

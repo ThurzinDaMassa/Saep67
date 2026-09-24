@@ -1,0 +1,16 @@
+plugins {
+    id 'application'
+}
+
+repositories { mavenCentral() }
+
+dependencies {
+    implementation 'org.mariadb.jdbc:mariadb-java-client:3.5.7'
+}
+
+application { mainClass = 'br.saep.estoque.WebApp' }
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 11
+}
