@@ -22,7 +22,7 @@ O [DER](../DER.png) foi gerado consultando as colunas e chaves estrangeiras reai
 
 ### IntelliJ IDEA
 
-Abra a pasta raiz `SAEP_SIMULADO` no IntelliJ e importe o projeto Gradle detectado em `settings.gradle`. Configure **Gradle JVM** como JDK 11. Depois, selecione **SAEP - Site** no canto superior direito e clique em **Run**. A configuração **SAEP - Desktop** executa o aplicativo Swing. Inicie o MySQL antes de entrar no site; para testar o fluxo HTTP, execute a tarefa Gradle `:sistema:verifyWeb`.
+Abra a pasta raiz `SAEP_SIMULADO` no IntelliJ e importe o projeto Gradle detectado em `settings.gradle`. Configure **Gradle JVM** como JDK 11. O projeto também declara esse requisito ao Gradle para compilar e executar as tarefas Java. Depois, selecione **SAEP - Site** no canto superior direito e clique em **Run**. A configuração **SAEP - Desktop** executa o aplicativo Swing. Inicie o MySQL antes de entrar no site; para testar o fluxo HTTP, execute a tarefa Gradle `:sistema:verifyWeb`. Se a tarefa `:sistema:run` encerrar com erro, confirme que o IntelliJ está usando JDK 11 e que não há outro servidor na porta `8080`.
 
 ### PowerShell
 

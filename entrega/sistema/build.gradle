@@ -8,6 +8,10 @@ dependencies {
 
 application { mainClass = 'br.saep.estoque.WebApp' }
 
+java {
+    toolchain { languageVersion = JavaLanguageVersion.of(11) }
+}
+
 tasks.register('runDesktop', JavaExec) {
     group = 'application'
     description = 'Abre a versão desktop do sistema SAEP.'
@@ -42,4 +46,20 @@ tasks.register('verifyProfile', JavaExec) {
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
     options.release = 11
+}
+
+tasks.withType(JavaExec).configureEach {
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(11) }
+}
+
+tasks.register('standaloneJar', Jar) {
+    group = 'distribution'
+    description = 'Gera um JAR executável com o driver JDBC para o aplicativo web.'
+    dependsOn classes
+    archiveFileName = 'SAEP-Site.jar'
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    manifest { attributes 'Main-Class': 'br.saep.estoque.WebLauncher' }
+    from sourceSets.main.output
+    from { configurations.runtimeClasspath.collect { zipTree(it) } }
+    exclude 'META-INF/*.SF', 'META-INF/*.RSA', 'META-INF/*.DSA'
 }

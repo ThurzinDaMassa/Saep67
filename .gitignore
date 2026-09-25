@@ -8,3 +8,4 @@ tmp/
 .env.*
 *.local
 SAEP_Gestao_Estoque.zip
+dist/

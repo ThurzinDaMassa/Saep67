@@ -14,6 +14,10 @@ Projeto do simulado SAEP para controlar ferramentas, produtos, saldos e moviment
 
 O wrapper Gradle 8.13 está incluído. Na primeira importação, o IntelliJ pode baixar a distribuição do Gradle; o driver JDBC já acompanha o projeto em `entrega/sistema/lib`.
 
+O Gradle seleciona o **JDK 11** para o servidor e para os testes. No IntelliJ, configure também **Gradle JVM = JDK 11**; o JDK 23 instalado neste computador falha ao iniciar o servidor HTTP. Se a porta `8080` já estiver ocupada, encerre a execução anterior antes de clicar em **Run** novamente.
+
+Para abrir sem o IntelliJ, use `dist/SAEP-Estoque/SAEP-Estoque.exe` ou extraia `dist/SAEP-Estoque-Windows.zip`. Esses arquivos são gerados localmente e não entram no repositório. Mantenha os demais arquivos da pasta ao lado do `.exe`; eles incluem o Java 11 necessário. O executável abre o site no navegador. Para reconstruí-lo após alterar o código, execute `./scripts/build_exe.ps1` no PowerShell (requer JDK 11 e `jpackage` do JDK 23).
+
 Para verificar a lógica, execute `./gradlew.bat :sistema:verifyLogic`. Com o banco ligado e o esquema importado, execute `./gradlew.bat :sistema:verifyWeb`.
 
 A aba **Meu perfil** permite alterar nome, usuário, função exibida, bio, foto, banner e senha. Para atualizar um banco já importado, execute [`entrega/banco/04_perfil.sql`](entrega/banco/04_perfil.sql) no MySQL; a aplicação também cria essa tabela automaticamente ao abrir o perfil. A função exibida não altera as permissões do usuário. Para verificar o perfil, execute `./gradlew.bat :sistema:verifyProfile`.
