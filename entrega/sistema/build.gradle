@@ -2,13 +2,34 @@ plugins {
     id 'application'
 }
 
-repositories { mavenCentral() }
-
 dependencies {
-    implementation 'org.mariadb.jdbc:mariadb-java-client:3.5.7'
+    implementation files('lib/mariadb-java-client-3.5.7.jar')
 }
 
 application { mainClass = 'br.saep.estoque.WebApp' }
+
+tasks.register('runDesktop', JavaExec) {
+    group = 'application'
+    description = 'Abre a versão desktop do sistema SAEP.'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'br.saep.estoque.App'
+}
+
+tasks.register('verifyLogic', JavaExec) {
+    group = 'verification'
+    description = 'Executa as verificações de regras de negócio.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'br.saep.estoque.LogicTest'
+}
+
+tasks.register('verifyWeb', JavaExec) {
+    group = 'verification'
+    description = 'Executa as verificações HTTP com o banco local.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'br.saep.estoque.WebIntegrationTest'
+}
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'

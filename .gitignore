@@ -1,5 +1,6 @@
 .idea/
 tmp/
+**/.gradle/
 **/build/
 *.class
 *.log
@@ -7,4 +8,3 @@ tmp/
 .env.*
 *.local
 SAEP_Gestao_Estoque.zip
-

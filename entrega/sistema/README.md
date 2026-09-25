@@ -20,6 +20,12 @@ O [DER](../DER.png) foi gerado consultando as colunas e chaves estrangeiras reai
 
 ## Abrir o site
 
+### IntelliJ IDEA
+
+Abra a pasta raiz `SAEP_SIMULADO` no IntelliJ e importe o projeto Gradle detectado em `settings.gradle`. Configure **Gradle JVM** como JDK 11. Depois, selecione **SAEP - Site** no canto superior direito e clique em **Run**. A configuração **SAEP - Desktop** executa o aplicativo Swing. Inicie o MySQL antes de entrar no site; para testar o fluxo HTTP, execute a tarefa Gradle `:sistema:verifyWeb`.
+
+### PowerShell
+
 No PowerShell, dentro da pasta `sistema`, execute:
 
 ```powershell

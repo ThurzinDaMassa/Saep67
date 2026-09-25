@@ -1,0 +1,3 @@
+rootProject.name = 'saep-gestao-estoque'
+include 'sistema'
+project(':sistema').projectDir = file('entrega/sistema')
