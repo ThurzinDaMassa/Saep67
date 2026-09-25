@@ -31,6 +31,14 @@ tasks.register('verifyWeb', JavaExec) {
     mainClass = 'br.saep.estoque.WebIntegrationTest'
 }
 
+tasks.register('verifyProfile', JavaExec) {
+    group = 'verification'
+    description = 'Verifica edição de perfil, senha e imagens com o banco local.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'br.saep.estoque.ProfileIntegrationTest'
+}
+
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
     options.release = 11

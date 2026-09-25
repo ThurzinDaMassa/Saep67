@@ -1,9 +1,11 @@
 package br.saep.estoque;
 
 import java.security.MessageDigest;
+import java.security.SecureRandom;
 import java.sql.*;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
@@ -19,6 +21,147 @@ public final class Store {
         public final long id;
         public final String name;
         User(long id, String name) { this.id = id; this.name = name; }
+    }
+
+    public static final class Profile {
+        public final String name, login, role, jobTitle, bio;
+        public final boolean hasPhoto, hasBanner;
+        Profile(String name, String login, String role, String jobTitle, String bio, boolean hasPhoto, boolean hasBanner) {
+            this.name = name; this.login = login; this.role = role; this.jobTitle = jobTitle; this.bio = bio;
+            this.hasPhoto = hasPhoto; this.hasBanner = hasBanner;
+        }
+    }
+
+    public static final class ProfileImage {
+        public final byte[] bytes;
+        public final String mime;
+        ProfileImage(byte[] bytes, String mime) { this.bytes = bytes; this.mime = mime; }
+    }
+
+    private void ensureProfileTable(Connection c) throws SQLException {
+        try (Statement s = c.createStatement()) {
+            s.execute("CREATE TABLE IF NOT EXISTS perfis (" +
+                "usuario_id BIGINT PRIMARY KEY, cargo VARCHAR(80) NOT NULL DEFAULT '', bio VARCHAR(500) NOT NULL DEFAULT '', " +
+                "foto MEDIUMBLOB NULL, foto_mime VARCHAR(20) NULL, banner MEDIUMBLOB NULL, banner_mime VARCHAR(20) NULL, " +
+                "CONSTRAINT fk_perfil_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE)");
+        }
+    }
+
+    public Profile profile(long userId) throws SQLException {
+        try (Connection c = connect()) {
+            ensureProfileTable(c);
+            try (PreparedStatement p = c.prepareStatement("SELECT u.nome, u.login, u.perfil, " +
+                    "COALESCE(pf.cargo, ''), COALESCE(pf.bio, ''), pf.foto_mime, pf.banner_mime " +
+                    "FROM usuarios u LEFT JOIN perfis pf ON pf.usuario_id = u.id WHERE u.id = ? AND u.ativo = TRUE")) {
+                p.setLong(1, userId);
+                try (ResultSet r = p.executeQuery()) {
+                    if (!r.next()) throw new IllegalArgumentException("Usuário não encontrado.");
+                    return new Profile(r.getString(1), r.getString(2), r.getString(3), r.getString(4), r.getString(5),
+                        r.getString(6) != null, r.getString(7) != null);
+                }
+            }
+        }
+    }
+
+    public User updateProfile(long userId, String name, String login, String jobTitle, String bio) throws SQLException {
+        if (name == null || name.trim().isEmpty() || name.trim().length() > 100)
+            throw new IllegalArgumentException("Nome deve ter entre 1 e 100 caracteres.");
+        if (login == null || !login.trim().matches("[A-Za-z0-9._-]{3,50}"))
+            throw new IllegalArgumentException("Usuário deve ter de 3 a 50 caracteres: letras, números, ponto, hífen ou sublinhado.");
+        if (jobTitle == null || jobTitle.trim().length() > 80)
+            throw new IllegalArgumentException("Função deve ter até 80 caracteres.");
+        if (bio == null || bio.trim().length() > 500)
+            throw new IllegalArgumentException("Bio deve ter até 500 caracteres.");
+        try (Connection c = connect()) {
+            ensureProfileTable(c);
+            c.setAutoCommit(false);
+            try {
+                try (PreparedStatement p = c.prepareStatement("UPDATE usuarios SET nome = ?, login = ? WHERE id = ? AND ativo = TRUE")) {
+                    p.setString(1, name.trim()); p.setString(2, login.trim()); p.setLong(3, userId);
+                    if (p.executeUpdate() == 0) throw new IllegalArgumentException("Usuário não encontrado.");
+                }
+                try (PreparedStatement p = c.prepareStatement("INSERT INTO perfis (usuario_id, cargo, bio) VALUES (?, ?, ?) " +
+                        "ON DUPLICATE KEY UPDATE cargo = VALUES(cargo), bio = VALUES(bio)")) {
+                    p.setLong(1, userId); p.setString(2, jobTitle.trim()); p.setString(3, bio.trim()); p.executeUpdate();
+                }
+                c.commit();
+                return new User(userId, name.trim());
+            } catch (Exception e) {
+                c.rollback();
+                if (e instanceof SQLException) throw (SQLException)e;
+                throw e;
+            }
+        }
+    }
+
+    public void changePassword(long userId, char[] current, char[] next) throws Exception {
+        if (next.length < 8 || next.length > 128) throw new IllegalArgumentException("A nova senha deve ter entre 8 e 128 caracteres.");
+        try (Connection c = connect()) {
+            c.setAutoCommit(false);
+            try {
+                String stored;
+                try (PreparedStatement p = c.prepareStatement("SELECT senha_hash FROM usuarios WHERE id = ? AND ativo = TRUE FOR UPDATE")) {
+                    p.setLong(1, userId);
+                    try (ResultSet r = p.executeQuery()) {
+                        if (!r.next()) throw new IllegalArgumentException("Usuário não encontrado.");
+                        stored = r.getString(1);
+                    }
+                }
+                if (!verifyPassword(current, stored)) throw new IllegalArgumentException("Senha atual incorreta.");
+                if (Arrays.equals(current, next)) throw new IllegalArgumentException("Escolha uma senha diferente da atual.");
+                byte[] salt = new byte[16]; new SecureRandom().nextBytes(salt);
+                PBEKeySpec spec = new PBEKeySpec(next, salt, 120000, 256);
+                byte[] hash;
+                try { hash = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).getEncoded(); }
+                finally { spec.clearPassword(); }
+                try (PreparedStatement p = c.prepareStatement("UPDATE usuarios SET senha_hash = ? WHERE id = ?")) {
+                    p.setString(1, toHex(salt) + ":" + toHex(hash)); p.setLong(2, userId); p.executeUpdate();
+                }
+                Arrays.fill(hash, (byte)0);
+                c.commit();
+            } catch (Exception e) { c.rollback(); throw e; }
+        }
+    }
+
+    private static String toHex(byte[] bytes) {
+        StringBuilder result = new StringBuilder(bytes.length * 2);
+        for (byte b : bytes) result.append(Character.forDigit((b >>> 4) & 15, 16)).append(Character.forDigit(b & 15, 16));
+        return result.toString();
+    }
+
+    public void saveImage(long userId, String kind, byte[] bytes, String mime) throws SQLException {
+        if (!kind.equals("foto") && !kind.equals("banner")) throw new IllegalArgumentException("Imagem inválida.");
+        try (Connection c = connect()) {
+            ensureProfileTable(c);
+            try (PreparedStatement p = c.prepareStatement("INSERT INTO perfis (usuario_id, " + kind + ", " + kind + "_mime) VALUES (?, ?, ?) " +
+                    "ON DUPLICATE KEY UPDATE " + kind + " = VALUES(" + kind + "), " + kind + "_mime = VALUES(" + kind + "_mime)")) {
+                p.setLong(1, userId); p.setBytes(2, bytes); p.setString(3, mime); p.executeUpdate();
+            }
+        }
+    }
+
+    public void removeImage(long userId, String kind) throws SQLException {
+        if (!kind.equals("foto") && !kind.equals("banner")) throw new IllegalArgumentException("Imagem inválida.");
+        try (Connection c = connect()) {
+            ensureProfileTable(c);
+            try (PreparedStatement p = c.prepareStatement("UPDATE perfis SET " + kind + " = NULL, " + kind + "_mime = NULL WHERE usuario_id = ?")) {
+                p.setLong(1, userId); p.executeUpdate();
+            }
+        }
+    }
+
+    public ProfileImage image(long userId, String kind) throws SQLException {
+        if (!kind.equals("foto") && !kind.equals("banner")) throw new IllegalArgumentException("Imagem inválida.");
+        try (Connection c = connect()) {
+            ensureProfileTable(c);
+            try (PreparedStatement p = c.prepareStatement("SELECT " + kind + ", " + kind + "_mime FROM perfis WHERE usuario_id = ?")) {
+                p.setLong(1, userId);
+                try (ResultSet r = p.executeQuery()) {
+                    if (!r.next() || r.getBytes(1) == null) return null;
+                    return new ProfileImage(r.getBytes(1), r.getString(2));
+                }
+            }
+        }
     }
 
     public static final class Product {

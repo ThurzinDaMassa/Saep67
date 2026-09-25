@@ -1,6 +1,6 @@
 # Sistema Web de Estoque - SAEP
 
-Site local em Java com MariaDB/MySQL. Permite login, cadastro, consulta, busca, edição e exclusão lógica de produtos, entradas e saídas, alerta de estoque mínimo e histórico com data e responsável. O aplicativo desktop anterior continua disponível como opção.
+Site local em Java com MariaDB/MySQL. Permite login, cadastro, consulta, busca, edição e exclusão lógica de produtos, entradas e saídas, alerta de estoque mínimo, histórico e edição do perfil do usuário. O aplicativo desktop anterior continua disponível como opção.
 
 ## Requisitos
 
@@ -12,9 +12,9 @@ Site local em Java com MariaDB/MySQL. Permite login, cadastro, consulta, busca, 
 ## Iniciar o banco e importar o esquema
 
 1. Abra o painel do XAMPP e inicie **MySQL**. Essa instalação do XAMPP usa MariaDB 10.4.32.
-2. No MySQL Workbench ou no cliente do XAMPP, execute `../saep_db.sql`. Esse arquivo cria `saep_db`, as três tabelas, chaves e dados iniciais.
+2. No MySQL Workbench ou no cliente do XAMPP, execute `../saep_db.sql`. Esse arquivo cria `saep_db`, as quatro tabelas, chaves e dados iniciais.
 3. Se preferir executar em etapas, use `../banco/01_criar_esquema.sql`, depois `../banco/02_dados_iniciais.sql` e, por fim, `../banco/03_verificar.sql`.
-4. Os scripts já foram importados e conferidos nesta instalação local. Cada tabela possui três registros iniciais.
+4. Para atualizar um banco existente sem reimportar os dados, execute `../banco/04_perfil.sql`. A aplicação também cria a tabela de perfis automaticamente na primeira visita à aba.
 
 O [DER](../DER.png) foi gerado consultando as colunas e chaves estrangeiras reais de `saep_db` no `INFORMATION_SCHEMA`.
 
@@ -40,6 +40,8 @@ Contas demonstrativas: `administrador`, `almoxarife` e `operador`. Senha inicial
 
 Na página **Gestão de estoque**, use **Registrar movimentação** para dar entrada em uma ferramenta já cadastrada. Para receber uma ferramenta que ainda não existe no catálogo, clique em **Receber item novo**, informe nome, descrição, quantidade, estoque mínimo e data e use **Cadastrar e dar entrada**. O produto, o saldo inicial e a entrada no histórico são gravados juntos no MySQL.
 
+Na aba **Meu perfil**, edite nome, usuário, função exibida e bio; envie foto (até 2 MB) e banner (até 4 MB) em JPG ou PNG; ou altere a senha informando a atual. As imagens ficam no MySQL e só são entregues a uma sessão autenticada. A função exibida é apenas descritiva: o perfil de permissão `ADMIN`, `ALMOXARIFE` ou `OPERADOR` não muda por esse formulário. Após trocar a senha, outras sessões da conta são encerradas.
+
 ## Organização do código
 
 - `WebApp.java`: rotas HTTP, páginas HTML, login, sessão, formulários e alertas.
@@ -51,7 +53,7 @@ Na página **Gestão de estoque**, use **Registrar movimentação** para dar ent
 
 ## Validação realizada
 
-O projeto compilou no JDK 11. Passaram 14 verificações de lógica, 19 de integração com MariaDB, 12 dos componentes Swing e 38 verificações HTTP do site. Os testes HTTP cobrem autenticação, proteção de páginas, validação, cadastro, busca, edição, exclusão, movimentações, recebimento de item novo, estoque mínimo, histórico e logout. Os produtos temporários dos testes foram removidos.
+O projeto compila no JDK 11. Execute `:sistema:verifyLogic`, `:sistema:verifyWeb` e `:sistema:verifyProfile` com o banco ligado. O teste de perfil usa uma conta temporária e confere edição, senha, upload e remoção de imagens; essa conta é apagada ao final.
 
 As páginas de login, painel, produtos, estoque e histórico foram conferidas visualmente no navegador. Antes da apresentação, clique em **Excluir** e confira o diálogo de confirmação do navegador.
 
@@ -60,5 +62,5 @@ As páginas de login, painel, produtos, estoque e histórico foram conferidas vi
 - Produtos excluídos ficam inativos para preservar o histórico.
 - Saldo e movimentação são gravados juntos em uma transação; `FOR UPDATE` protege o saldo durante a alteração.
 - Saída maior que o saldo é recusada; estoque baixo significa `estoque_atual < estoque_minimo`.
-- Senhas são verificadas por PBKDF2; formulários autenticados usam token CSRF e consultas SQL parametrizadas.
+- Senhas são verificadas por PBKDF2; formulários autenticados, incluindo upload de imagens, usam token CSRF e consultas SQL parametrizadas.
 - O site escuta somente em `127.0.0.1` por padrão, para acesso neste computador.

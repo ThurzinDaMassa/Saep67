@@ -2,6 +2,8 @@ package br.saep.estoque;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
@@ -16,6 +18,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import javax.imageio.ImageIO;
 
 /** Site local servido pelo JDK, com HTML renderizado no servidor e banco MariaDB/MySQL. */
 public final class WebApp {
@@ -25,7 +28,7 @@ public final class WebApp {
     private final HttpServer server;
 
     private static final class Session {
-        final Store.User user;
+        volatile Store.User user;
         final String csrf;
         final long createdAt;
         Session(Store.User user, String csrf) {
@@ -61,6 +64,9 @@ public final class WebApp {
             Session session = session(exchange);
             if (session == null) { redirect(exchange, "/login"); return; }
             if (method.equals("POST")) {
+                if (path.equals("/perfil/foto") || path.equals("/perfil/banner")) {
+                    uploadImage(exchange, session, path.endsWith("foto") ? "foto" : "banner"); return;
+                }
                 Map<String, String> form = form(exchange);
                 if (!session.csrf.equals(form.get("csrf"))) { respond(exchange, 403, page("Acesso negado", session, "", "<div class='notice error'>Formulário inválido. Recarregue a página.</div>")); return; }
                 if (path.equals("/logout")) { logout(exchange); return; }
@@ -69,12 +75,21 @@ public final class WebApp {
                 if (path.equals("/produtos/excluir")) { deleteProduct(exchange, form); return; }
                 if (path.equals("/estoque/movimentar")) { move(exchange, session, form); return; }
                 if (path.equals("/estoque/novo-item")) { receiveNewItem(exchange, session, form); return; }
+                if (path.equals("/perfil/atualizar")) { updateProfile(exchange, session, form); return; }
+                if (path.equals("/perfil/senha")) { changePassword(exchange, session, form); return; }
+                if (path.equals("/perfil/remover-foto") || path.equals("/perfil/remover-banner")) {
+                    removeImage(exchange, session, path.endsWith("foto") ? "foto" : "banner"); return;
+                }
             } else if (method.equals("GET")) {
                 if (path.equals("/")) { dashboard(exchange, session); return; }
                 if (path.equals("/produtos")) { products(exchange, session); return; }
                 if (path.equals("/produtos/editar")) { editPage(exchange, session); return; }
                 if (path.equals("/estoque")) { stock(exchange, session); return; }
                 if (path.equals("/historico")) { history(exchange, session); return; }
+                if (path.equals("/perfil")) { profile(exchange, session); return; }
+                if (path.equals("/perfil/foto") || path.equals("/perfil/banner")) {
+                    profileImage(exchange, session, path.endsWith("foto") ? "foto" : "banner"); return;
+                }
             }
             respond(exchange, 404, page("Página não encontrada", session, "", "<div class='notice error'>Página não encontrada.</div>"));
         } catch (IllegalArgumentException e) {
@@ -337,9 +352,165 @@ public final class WebApp {
         respond(exchange, 200, page("Histórico", session, "history", body.toString()));
     }
 
+    private void profile(HttpExchange exchange, Session session) throws Exception {
+        Store.Profile p = store.profile(session.user.id);
+        String initials = p.name.isEmpty() ? "?" : p.name.substring(0, 1).toUpperCase(java.util.Locale.ROOT);
+        StringBuilder body = new StringBuilder("<div class='page-heading'><div><p class='eyebrow'>CONTA / PERFIL</p><h1>Meu perfil</h1>" +
+            "<p class='muted'>Personalize sua apresentação e mantenha a conta protegida.</p></div></div>");
+        body.append(flash(query(exchange)));
+        body.append("<section class='profile-hero'><div class='profile-banner'>");
+        if (p.hasBanner) body.append("<img src='/perfil/banner' alt='Banner do perfil'>");
+        else body.append("<span class='profile-banner-label'>SAEP <span>/</span> PERFIL</span>");
+        body.append("</div><div class='profile-intro'><span class='profile-avatar'>");
+        if (p.hasPhoto) body.append("<img src='/perfil/foto' alt='Foto de perfil'>");
+        else body.append(esc(initials));
+        body.append("</span><div class='profile-identity'><p class='eyebrow'>IDENTIDADE PROFISSIONAL</p><h2>")
+            .append(esc(p.name)).append("</h2><p>").append(esc(p.jobTitle.isEmpty() ? "Adicione sua função" : p.jobTitle))
+            .append(" <span class='identity-separator'>/</span> @").append(esc(p.login)).append("</p></div><span class='profile-role'>")
+            .append(esc(roleName(p.role))).append("</span></div>");
+        if (!p.bio.isEmpty()) body.append("<p class='profile-bio'>").append(esc(p.bio)).append("</p>");
+        body.append("</section><div class='profile-grid'><div class='profile-main'><section class='panel'><div class='panel-head'><div class='panel-heading-icon'>")
+            .append(icon("user")).append("</div><div><h2>Informações pessoais</h2><p class='muted'>Atualize os dados exibidos no sistema.</p></div></div>")
+            .append("<form method='post' action='/perfil/atualizar' class='form-stack'>").append(hidden(session))
+            .append("<div class='form-grid'><label>Nome completo <span class='required'>*</span><input name='nome' required maxlength='100' value='")
+            .append(esc(p.name)).append("' autocomplete='name'></label><label>Nome de usuário <span class='required'>*</span><input name='login' required minlength='3' maxlength='50' pattern='[A-Za-z0-9._-]+' value='")
+            .append(esc(p.login)).append("' autocomplete='username'></label></div><label>Função / cargo<input name='cargo' maxlength='80' value='")
+            .append(esc(p.jobTitle)).append("' placeholder='Ex.: Almoxarife, Técnico de manutenção'></label>")
+            .append("<label>Bio<textarea name='bio' maxlength='500' rows='4' placeholder='Fale um pouco sobre sua função no almoxarifado'>")
+            .append(esc(p.bio)).append("</textarea></label><p class='helper'>A função acima é exibida no perfil. Seu nível de acesso permanece ")
+            .append(esc(roleName(p.role))).append(".</p><button class='button primary' type='submit'>")
+            .append(icon("check")).append(" Salvar informações</button></form></section>")
+            .append("<section class='panel'><div class='panel-head'><div class='panel-heading-icon'>").append(icon("shield"))
+            .append("</div><div><h2>Segurança</h2><p class='muted'>Altere sua senha de acesso.</p></div></div>")
+            .append("<form method='post' action='/perfil/senha' class='form-stack'>").append(hidden(session))
+            .append("<label>Senha atual<input type='password' name='atual' required autocomplete='current-password'></label>")
+            .append("<div class='form-grid'><label>Nova senha<input type='password' name='nova' required minlength='8' maxlength='128' autocomplete='new-password'></label>")
+            .append("<label>Confirmar nova senha<input type='password' name='confirmacao' required minlength='8' maxlength='128' autocomplete='new-password'></label></div>")
+            .append("<p class='helper'>Use pelo menos 8 caracteres. As outras sessões serão encerradas após a troca.</p>")
+            .append("<button class='button subtle' type='submit'>").append(icon("shield")).append(" Alterar senha</button></form></section></div>")
+            .append("<div class='profile-media'><section class='panel'><div class='panel-head'><div class='panel-heading-icon'>").append(icon("image"))
+            .append("</div><div><h2>Foto de perfil</h2><p class='muted'>JPG ou PNG, até 2 MB.</p></div></div>")
+            .append("<form method='post' action='/perfil/foto' enctype='multipart/form-data' class='form-stack'>").append(hidden(session))
+            .append("<label>Selecionar foto<input type='file' name='imagem' accept='image/jpeg,image/png' required></label>")
+            .append("<button class='button primary' type='submit'>").append(icon("image")).append(" Enviar foto</button></form>");
+        if (p.hasPhoto) body.append("<form method='post' action='/perfil/remover-foto' class='media-remove'>").append(hidden(session))
+            .append("<button class='text-link danger-text' type='submit'>").append(icon("trash")).append(" Remover foto</button></form>");
+        body.append("</section><section class='panel'><div class='panel-head'><div class='panel-heading-icon'>").append(icon("image"))
+            .append("</div><div><h2>Banner do perfil</h2><p class='muted'>JPG ou PNG, até 4 MB.</p></div></div>")
+            .append("<form method='post' action='/perfil/banner' enctype='multipart/form-data' class='form-stack'>").append(hidden(session))
+            .append("<label>Selecionar banner<input type='file' name='imagem' accept='image/jpeg,image/png' required></label>")
+            .append("<button class='button primary' type='submit'>").append(icon("image")).append(" Enviar banner</button></form>");
+        if (p.hasBanner) body.append("<form method='post' action='/perfil/remover-banner' class='media-remove'>").append(hidden(session))
+            .append("<button class='text-link danger-text' type='submit'>").append(icon("trash")).append(" Remover banner</button></form>");
+        body.append("</section></div></div>");
+        respond(exchange, 200, page("Meu perfil", session, "profile", body.toString()));
+    }
+
+    private static String roleName(String role) {
+        if ("ADMIN".equals(role)) return "Administrador";
+        if ("ALMOXARIFE".equals(role)) return "Almoxarife";
+        if ("OPERADOR".equals(role)) return "Operador";
+        return role == null ? "Usuário" : role;
+    }
+
+    private void updateProfile(HttpExchange exchange, Session session, Map<String, String> form) throws IOException {
+        try {
+            Store.User updated = store.updateProfile(session.user.id, form.get("nome"), form.get("login"),
+                form.getOrDefault("cargo", ""), form.getOrDefault("bio", ""));
+            for (Session other : sessions.values()) if (other.user.id == updated.id) other.user = updated;
+            redirect(exchange, "/perfil?ok=" + enc("Informações atualizadas."));
+        } catch (Exception e) { redirect(exchange, "/perfil?erro=" + enc(message(e))); }
+    }
+
+    private void changePassword(HttpExchange exchange, Session session, Map<String, String> form) throws IOException {
+        char[] current = form.getOrDefault("atual", "").toCharArray();
+        char[] next = form.getOrDefault("nova", "").toCharArray();
+        char[] confirmation = form.getOrDefault("confirmacao", "").toCharArray();
+        try {
+            if (!Arrays.equals(next, confirmation)) throw new IllegalArgumentException("A confirmação não corresponde à nova senha.");
+            store.changePassword(session.user.id, current, next);
+            sessions.entrySet().removeIf(entry -> entry.getValue().user.id == session.user.id && !entry.getKey().equals(cookie(exchange, "SAEP_SESSION")));
+            redirect(exchange, "/perfil?ok=" + enc("Senha alterada. Outras sessões foram encerradas."));
+        } catch (Exception e) { redirect(exchange, "/perfil?erro=" + enc(message(e))); }
+        finally { Arrays.fill(current, '\0'); Arrays.fill(next, '\0'); Arrays.fill(confirmation, '\0'); }
+    }
+
+    private void removeImage(HttpExchange exchange, Session session, String kind) throws IOException {
+        try {
+            store.removeImage(session.user.id, kind);
+            redirect(exchange, "/perfil?ok=" + enc(kind.equals("foto") ? "Foto removida." : "Banner removido."));
+        } catch (Exception e) { redirect(exchange, "/perfil?erro=" + enc(message(e))); }
+    }
+
+    private void profileImage(HttpExchange exchange, Session session, String kind) throws Exception {
+        Store.ProfileImage img = store.image(session.user.id, kind);
+        if (img == null) { exchange.sendResponseHeaders(404, -1); return; }
+        exchange.getResponseHeaders().set("Content-Type", img.mime);
+        exchange.getResponseHeaders().set("Cache-Control", "private, no-store");
+        exchange.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
+        exchange.sendResponseHeaders(200, img.bytes.length);
+        exchange.getResponseBody().write(img.bytes);
+    }
+
+    private static final class Upload {
+        String csrf;
+        byte[] image;
+    }
+
+    private static Upload multipart(HttpExchange exchange) throws IOException {
+        String type = exchange.getRequestHeaders().getFirst("Content-Type");
+        if (type == null || !type.toLowerCase(java.util.Locale.ROOT).startsWith("multipart/form-data;"))
+            throw new IllegalArgumentException("Tipo de formulário inválido.");
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("boundary=\"?([A-Za-z0-9'()+_,./:=?-]{1,70})\"?").matcher(type);
+        if (!matcher.find()) throw new IllegalArgumentException("Envio de imagem inválido.");
+        byte[] data;
+        try (InputStream input = exchange.getRequestBody()) { data = input.readNBytes(4 * 1024 * 1024 + 16 * 1024 + 1); }
+        if (data.length > 4 * 1024 * 1024 + 16 * 1024) throw new IllegalArgumentException("Imagem muito grande.");
+        String raw = new String(data, StandardCharsets.ISO_8859_1);
+        String delimiter = "--" + matcher.group(1);
+        if (!raw.startsWith(delimiter + "\r\n")) throw new IllegalArgumentException("Envio de imagem inválido.");
+        Upload upload = new Upload();
+        int position = 0;
+        while (true) {
+            int headersStart = position + delimiter.length() + 2;
+            int headersEnd = raw.indexOf("\r\n\r\n", headersStart);
+            if (headersEnd < 0) throw new IllegalArgumentException("Envio de imagem inválido.");
+            String headers = raw.substring(headersStart, headersEnd);
+            int contentStart = headersEnd + 4;
+            int contentEnd = raw.indexOf("\r\n" + delimiter, contentStart);
+            if (contentEnd < 0) throw new IllegalArgumentException("Envio de imagem inválido.");
+            if (headers.contains("name=\"csrf\"")) upload.csrf = new String(data, contentStart, contentEnd - contentStart, StandardCharsets.UTF_8);
+            else if (headers.contains("name=\"imagem\"")) upload.image = Arrays.copyOfRange(data, contentStart, contentEnd);
+            position = contentEnd + 2;
+            if (raw.startsWith(delimiter + "--", position)) break;
+            if (!raw.startsWith(delimiter + "\r\n", position)) throw new IllegalArgumentException("Envio de imagem inválido.");
+        }
+        return upload;
+    }
+
+    private void uploadImage(HttpExchange exchange, Session session, String kind) throws IOException {
+        try {
+            Upload upload = multipart(exchange);
+            if (!session.csrf.equals(upload.csrf)) { respond(exchange, 403, page("Acesso negado", session, "profile", "<div class='notice error'>Formulário inválido. Recarregue a página.</div>")); return; }
+            int limit = kind.equals("foto") ? 2 * 1024 * 1024 : 4 * 1024 * 1024;
+            if (upload.image == null || upload.image.length == 0 || upload.image.length > limit)
+                throw new IllegalArgumentException("Selecione uma imagem dentro do limite de tamanho.");
+            byte[] bytes = upload.image;
+            String mime;
+            if (bytes.length >= 8 && bytes[0] == (byte)0x89 && bytes[1] == 0x50 && bytes[2] == 0x4e && bytes[3] == 0x47 && bytes[4] == 0x0d && bytes[5] == 0x0a && bytes[6] == 0x1a && bytes[7] == 0x0a) mime = "image/png";
+            else if (bytes.length >= 3 && bytes[0] == (byte)0xff && bytes[1] == (byte)0xd8 && bytes[2] == (byte)0xff) mime = "image/jpeg";
+            else throw new IllegalArgumentException("Use uma imagem JPG ou PNG válida.");
+            BufferedImage decoded = ImageIO.read(new ByteArrayInputStream(bytes));
+            if (decoded == null || decoded.getWidth() > 6000 || decoded.getHeight() > 4000 || decoded.getWidth() < 1 || decoded.getHeight() < 1)
+                throw new IllegalArgumentException("Imagem inválida ou com dimensões excessivas.");
+            store.saveImage(session.user.id, kind, bytes, mime);
+            redirect(exchange, "/perfil?ok=" + enc(kind.equals("foto") ? "Foto atualizada." : "Banner atualizado."));
+        } catch (Exception e) { redirect(exchange, "/perfil?erro=" + enc(message(e))); }
+    }
+
     private static String page(String title, Session session, String active, String body) {
         StringBuilder html = new StringBuilder("<!doctype html><html lang='pt-BR'><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1'>")
-            .append("<title>").append(esc(title)).append(" · SAEP</title><link rel='stylesheet' href='/assets/style.css?v=20260924b'></head><body>");
+            .append("<title>").append(esc(title)).append(" · SAEP</title><link rel='stylesheet' href='/assets/style.css?v=20260925perfil'></head><body>");
         if (session != null) {
             html.append("<div class='app-layout'><aside class='sidebar'><a class='brand' href='/'><span class='brand-symbol'>")
                 .append(icon("package")).append("</span><span>SAEP <small>CONTROLE DE ESTOQUE</small></span></a>")
@@ -348,6 +519,7 @@ public final class WebApp {
                 .append(navLink(active, "products", "/produtos", "Produtos", "package"))
                 .append(navLink(active, "stock", "/estoque", "Gestão de estoque", "arrows"))
                 .append(navLink(active, "history", "/historico", "Histórico", "clock"))
+                .append(navLink(active, "profile", "/perfil", "Meu perfil", "user"))
                 .append("</nav><div class='sidebar-bottom'><div class='sidebar-user'><span class='user-avatar'>")
                 .append(esc(session.user.name.substring(0, 1).toUpperCase(java.util.Locale.ROOT)))
                 .append("</span><span class='user-info'><strong>").append(esc(session.user.name))
@@ -385,6 +557,8 @@ public final class WebApp {
             case "arrow-right": paths = "<path d='M4 12h16m-6-6 6 6-6 6'/>"; break;
             case "arrow-left": paths = "<path d='M20 12H4m6-6-6 6 6 6'/>"; break;
             case "info": paths = "<circle cx='12' cy='12' r='9'/><path d='M12 11v5m0-8h.01'/>"; break;
+            case "user": paths = "<circle cx='12' cy='8' r='4'/><path d='M4 21v-2a8 8 0 0 1 16 0v2'/>"; break;
+            case "image": paths = "<rect x='3' y='3' width='18' height='18'/><circle cx='8.5' cy='8.5' r='1.5'/><path d='m3 17 5-5 4 4 3-3 6 6'/>"; break;
             default: throw new IllegalArgumentException("Ícone desconhecido: " + name);
         }
         return "<svg class='icon' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'>" + paths + "</svg>";

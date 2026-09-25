@@ -16,6 +16,8 @@ O wrapper Gradle 8.13 está incluído. Na primeira importação, o IntelliJ pode
 
 Para verificar a lógica, execute `./gradlew.bat :sistema:verifyLogic`. Com o banco ligado e o esquema importado, execute `./gradlew.bat :sistema:verifyWeb`.
 
+A aba **Meu perfil** permite alterar nome, usuário, função exibida, bio, foto, banner e senha. Para atualizar um banco já importado, execute [`entrega/banco/04_perfil.sql`](entrega/banco/04_perfil.sql) no MySQL; a aplicação também cria essa tabela automaticamente ao abrir o perfil. A função exibida não altera as permissões do usuário. Para verificar o perfil, execute `./gradlew.bat :sistema:verifyProfile`.
+
 As contas de demonstração e as variáveis de configuração estão descritas em [`entrega/sistema/README.md`](entrega/sistema/README.md). Altere as credenciais antes de usar o sistema fora do simulado.
 
 ## Conteúdo
