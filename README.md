@@ -20,6 +20,8 @@ Para abrir sem o IntelliJ, use `dist/SAEP-Estoque/SAEP-Estoque.exe` ou extraia `
 
 Para verificar a lógica, execute `./gradlew.bat :sistema:verifyLogic`. Com o banco ligado e o esquema importado, execute `./gradlew.bat :sistema:verifyWeb`.
 
+Na tela de login, clique em **Criar conta** para cadastrar nome, usuário e senha. As novas contas recebem o perfil **OPERADOR** e podem entrar após a confirmação do cadastro. A senha exige de 8 a 128 caracteres e é armazenada com PBKDF2 e salt individual; usuários duplicados são recusados. O cadastro usa a tabela `usuarios` existente, sem exigir atualização do esquema. Para testar esse fluxo com o banco ligado, execute `./gradlew.bat :sistema:verifyRegistration`.
+
 A aba **Meu perfil** permite alterar nome, usuário, função exibida, bio, foto, banner e senha. Para atualizar um banco já importado, execute [`entrega/banco/04_perfil.sql`](entrega/banco/04_perfil.sql) no MySQL; a aplicação também cria essa tabela automaticamente ao abrir o perfil. A função exibida não altera as permissões do usuário. Para verificar o perfil, execute `./gradlew.bat :sistema:verifyProfile`.
 
 As contas de demonstração e as variáveis de configuração estão descritas em [`entrega/sistema/README.md`](entrega/sistema/README.md). Altere as credenciais antes de usar o sistema fora do simulado.

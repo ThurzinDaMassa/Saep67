@@ -61,6 +61,8 @@ public final class WebApp {
             if (path.equals("/assets/style.css") && method.equals("GET")) { css(exchange); return; }
             if (path.equals("/login") && method.equals("GET")) { loginPage(exchange, ""); return; }
             if (path.equals("/login") && method.equals("POST")) { login(exchange); return; }
+            if (path.equals("/cadastro") && method.equals("GET")) { registrationPage(exchange, 200, "", "", ""); return; }
+            if (path.equals("/cadastro") && method.equals("POST")) { register(exchange); return; }
             Session session = session(exchange);
             if (session == null) { redirect(exchange, "/login"); return; }
             if (method.equals("POST")) {
@@ -102,22 +104,68 @@ public final class WebApp {
 
     private void loginPage(HttpExchange exchange, String error) throws IOException {
         String body = "<main class='login-layout'><section class='login-showcase'>" +
-                "<div class='showcase-brand'><span class='brand-symbol'>" + icon("package") + "</span><span>SAEP <small>CONTROLE DE ESTOQUE</small></span></div>" +
+                "<div class='showcase-brand'><span class='brand-symbol'>" + brandMark() + "</span><span>SAEP <small>CONTROLE DE ESTOQUE</small></span></div>" +
                 "<div class='showcase-content'><p class='eyebrow'>SAEP / CONTROLE DE ESTOQUE</p><h2>Ferramentas, saldos e movimentações em um só lugar.</h2>" +
                 "<p>Consulte o catálogo, registre operações e acompanhe o estoque do almoxarifado com clareza.</p>" +
                 "<div class='showcase-points'><span>" + icon("package") + " Catálogo organizado</span><span>" + icon("arrows") + " Movimentações rastreáveis</span><span>" + icon("alert") + " Alertas de estoque</span></div></div>" +
                 "<div class='showcase-footer'>SIMULADO SAEP <span>•</span> GESTÃO DE FERRAMENTAS</div></section>" +
-                "<section class='login-side'><div class='login-card'><div class='login-mark'>" + icon("shield") + "</div>" +
+                "<section class='login-side'><div class='login-card'><div class='login-mark'>" + brandMark() + "</div>" +
                 "<p class='eyebrow'>ACESSO AO SISTEMA</p><h1>Entre na sua conta</h1>" +
                 "<p class='muted'>Entre com suas credenciais para continuar.</p>" +
+                ("sucesso".equals(query(exchange).get("cadastro")) ? "<div class='notice success' role='status'>" + icon("check") + "<span>Conta criada com sucesso! Entre com seu usuário e senha.</span></div>" : "") +
                 (error.isEmpty() ? "" : "<div class='notice error'>" + icon("alert") + "<span>" + esc(error) + "</span></div>") +
                 "<form method='post' action='/login' class='form-stack'>" +
                 "<label>Usuário<input name='login' autocomplete='username' required maxlength='50' placeholder='Seu usuário' autofocus></label>" +
                 "<label>Senha<input type='password' name='senha' autocomplete='current-password' required placeholder='Sua senha'></label>" +
                 "<button class='button primary full' type='submit'>Entrar no sistema" + icon("arrow-right") + "</button></form>" +
+                "<p class='auth-switch'>Ainda não tem uma conta? <a href='/cadastro'>Criar conta</a></p>" +
                 "<div class='login-helper'>" + icon("info") + "<span>Para o simulado, use uma das contas demonstrativas: administrador, almoxarife ou operador.</span></div>" +
                 "</div></section></main>";
         respond(exchange, 200, page("Entrar", null, "login", body));
+    }
+
+    private void registrationPage(HttpExchange exchange, int status, String error, String name, String login) throws IOException {
+        String csrf = token();
+        exchange.getResponseHeaders().add("Set-Cookie", "SAEP_REGISTER=" + csrf + "; Path=/cadastro; HttpOnly; SameSite=Lax; Max-Age=3600");
+        String body = "<main class='login-layout'><section class='login-showcase'>" +
+            "<div class='showcase-brand'><span class='brand-symbol'>" + brandMark() + "</span><span>SAEP <small>CONTROLE DE ESTOQUE</small></span></div>" +
+            "<div class='showcase-content'><p class='eyebrow'>FAÇA PARTE DO SAEP</p><h2>Seu estoque organizado começa aqui.</h2>" +
+            "<p>Crie sua conta para consultar ferramentas, registrar movimentações e acompanhar os saldos em um só lugar.</p>" +
+            "<div class='showcase-points'><span>" + icon("package") + " Catálogo organizado</span><span>" + icon("arrows") + " Movimentações rastreáveis</span><span>" + icon("shield") + " Acesso com sua conta</span></div></div>" +
+            "<div class='showcase-footer'>SIMULADO SAEP <span>•</span> GESTÃO DE FERRAMENTAS</div></section>" +
+            "<section class='login-side'><div class='login-card'><div class='login-mark'>" + brandMark() + "</div>" +
+            "<p class='eyebrow'>CADASTRO DE USUÁRIO</p><h1>Crie sua conta</h1><p class='muted'>Preencha seus dados para começar.</p>" +
+            (error.isEmpty() ? "" : "<div class='notice error' role='alert'>" + icon("alert") + "<span>" + esc(error) + "</span></div>") +
+            "<form method='post' action='/cadastro' class='form-stack'>" +
+            "<input type='hidden' name='csrf' value='" + esc(csrf) + "'>" +
+            "<label>Nome completo<input name='nome' autocomplete='name' required maxlength='100' placeholder='Seu nome completo' value='" + esc(name) + "' autofocus></label>" +
+            "<label>Usuário<input name='login' autocomplete='username' required minlength='3' maxlength='50' pattern='[A-Za-z0-9._\\-]{3,50}' aria-describedby='usuario-ajuda' placeholder='Escolha seu usuário' value='" + esc(login) + "'>" +
+            "<small class='field-helper' id='usuario-ajuda'>De 3 a 50 caracteres: letras, números, ponto, hífen ou sublinhado.</small></label>" +
+            "<label>Senha<input type='password' name='senha' autocomplete='new-password' required minlength='8' maxlength='128' aria-describedby='senha-ajuda' placeholder='Crie uma senha'>" +
+            "<small class='field-helper' id='senha-ajuda'>Use entre 8 e 128 caracteres.</small></label>" +
+            "<label>Confirmar senha<input type='password' name='confirmacao' autocomplete='new-password' required minlength='8' maxlength='128' placeholder='Repita sua senha'></label>" +
+            "<button class='button primary full' type='submit'>Criar minha conta" + icon("arrow-right") + "</button></form>" +
+            "<p class='auth-switch'>Já tem uma conta? <a href='/login'>Entrar</a></p></div></section></main>";
+        respond(exchange, status, page("Criar conta", null, "register", body));
+    }
+
+    private void register(HttpExchange exchange) throws IOException {
+        Map<String, String> values = form(exchange);
+        String csrf = cookie(exchange, "SAEP_REGISTER");
+        if (csrf == null || !csrf.matches("[A-Za-z0-9_-]{43}") || !csrf.equals(values.get("csrf"))) {
+            registrationPage(exchange, 403, "Formulário expirado ou inválido. Tente novamente.", values.getOrDefault("nome", ""), values.getOrDefault("login", ""));
+            return;
+        }
+        char[] password = values.getOrDefault("senha", "").toCharArray();
+        char[] confirmation = values.getOrDefault("confirmacao", "").toCharArray();
+        try {
+            if (!Arrays.equals(password, confirmation)) throw new IllegalArgumentException("As senhas não coincidem.");
+            store.register(values.get("nome"), values.get("login"), password);
+            exchange.getResponseHeaders().add("Set-Cookie", "SAEP_REGISTER=; Path=/cadastro; HttpOnly; SameSite=Lax; Max-Age=0");
+            redirect(exchange, "/login?cadastro=sucesso");
+        } catch (Exception e) {
+            registrationPage(exchange, e instanceof IllegalArgumentException ? 400 : 500, message(e), values.getOrDefault("nome", ""), values.getOrDefault("login", ""));
+        } finally { Arrays.fill(password, '\0'); Arrays.fill(confirmation, '\0'); }
     }
 
     private void login(HttpExchange exchange) throws Exception {
@@ -510,25 +558,25 @@ public final class WebApp {
 
     private static String page(String title, Session session, String active, String body) {
         StringBuilder html = new StringBuilder("<!doctype html><html lang='pt-BR'><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1'>")
-            .append("<title>").append(esc(title)).append(" · SAEP</title><link rel='stylesheet' href='/assets/style.css?v=20260925perfil'></head><body>");
+            .append("<title>").append(esc(title)).append(" · SAEP</title><link rel='stylesheet' href='/assets/style.css?v=20260930topnav'></head><body>");
         if (session != null) {
-            html.append("<div class='app-layout'><aside class='sidebar'><a class='brand' href='/'><span class='brand-symbol'>")
-                .append(icon("package")).append("</span><span>SAEP <small>CONTROLE DE ESTOQUE</small></span></a>")
-                .append("<div class='nav-section-title'>ESPAÇO DE TRABALHO</div><nav class='sidebar-nav' aria-label='Navegação principal'>")
-                .append(navLink(active, "home", "/", "Visão geral", "grid"))
+            html.append("<div class='app-layout'><a class='skip-link' href='#conteudo'>Ir para o conteúdo</a><header class='app-header'><div class='header-inner'><a class='brand' href='/' aria-label='SAEP — página inicial'><span class='brand-symbol'>")
+                .append(brandMark()).append("</span><span>SAEP <small>CONTROLE DE ESTOQUE</small></span></a>")
+                .append("<nav class='header-nav' aria-label='Navegação principal'>")
+                .append(navLink(active, "home", "/", "Dashboard", "grid"))
                 .append(navLink(active, "products", "/produtos", "Produtos", "package"))
-                .append(navLink(active, "stock", "/estoque", "Gestão de estoque", "arrows"))
+                .append(navLink(active, "stock", "/estoque", "Estoque", "arrows"))
                 .append(navLink(active, "history", "/historico", "Histórico", "clock"))
                 .append(navLink(active, "profile", "/perfil", "Meu perfil", "user"))
-                .append("</nav><div class='sidebar-bottom'><div class='sidebar-user'><span class='user-avatar'>")
+                .append("</nav><div class='header-account'><a class='header-user' href='/perfil' aria-label='Abrir meu perfil'><span class='user-avatar'>")
                 .append(esc(session.user.name.substring(0, 1).toUpperCase(java.util.Locale.ROOT)))
                 .append("</span><span class='user-info'><strong>").append(esc(session.user.name))
-                .append("</strong><small>Usuário autorizado</small></span></div>")
+                .append("</strong><small>Minha conta</small></span></a>")
                 .append("<form method='post' action='/logout'>").append(hidden(session))
-                .append("<button class='logout' type='submit'>").append(icon("logout")).append(" Sair do sistema</button></form></div></aside>")
-                .append("<div class='workspace'><header class='topbar'><div><span class='topbar-prefix'>SAEP</span><span class='topbar-separator'>/</span><strong>")
-                .append(esc(title)).append("</strong></div><span class='topbar-status'><span></span> Sistema operacional</span></header>")
-                .append("<main class='content'>").append(body).append("</main></div></div>");
+                .append("<button class='logout' type='submit' aria-label='Sair do sistema' title='Sair do sistema'>").append(icon("logout")).append("<span>Sair</span></button></form></div></div></header>")
+                .append("<div class='workspace'><div class='topbar'><div><span class='topbar-prefix'>ESPAÇO DE TRABALHO</span><span class='topbar-separator'>/</span><strong>")
+                .append(esc(title)).append("</strong></div><span class='topbar-status'><span></span> Sistema operacional</span></div>")
+                .append("<main class='content' id='conteudo' tabindex='-1'>").append(body).append("</main></div></div>");
         } else html.append(body);
         html.append("</body></html>");
         return html.toString();
@@ -537,6 +585,15 @@ public final class WebApp {
     private static String navLink(String active, String id, String href, String label, String symbol) {
         return "<a class='nav-link" + (active.equals(id) ? " active" : "") + "' href='" + href + "'" +
             (active.equals(id) ? " aria-current='page'" : "") + ">" + icon(symbol) + "<span>" + label + "</span></a>";
+    }
+
+    private static String brandMark() {
+        return "<svg class='brand-mark' viewBox='0 0 48 48' fill='none' aria-hidden='true'>" +
+            "<path d='M24 3 43 14v20L24 45 5 34V14L24 3Z' fill='#ff8b38'/>" +
+            "<path d='m24 10 12 7-12 7-12-7 12-7Z' fill='white'/>" +
+            "<path d='m12 17 12 7v7l-12-7v-7Zm12 14 12-7v7l-12 7-12-7v-7l12 7Z' fill='#102747'/>" +
+            "<path d='m24 24 12-7v7l-12 7v-7Z' fill='white'/>" +
+            "</svg>";
     }
 
     private static String icon(String name) {
@@ -592,7 +649,12 @@ public final class WebApp {
         if (header == null) return null;
         for (String part : header.split(";")) {
             String[] kv = part.trim().split("=", 2);
-            if (kv.length == 2 && kv[0].equals(name)) return kv[1];
+            if (kv.length == 2 && kv[0].equals(name)) {
+                String value = kv[1];
+                if (value.length() >= 2 && value.startsWith("\"") && value.endsWith("\""))
+                    value = value.substring(1, value.length() - 1);
+                return value;
+            }
         }
         return null;
     }

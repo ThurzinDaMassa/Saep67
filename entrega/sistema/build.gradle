@@ -43,6 +43,14 @@ tasks.register('verifyProfile', JavaExec) {
     mainClass = 'br.saep.estoque.ProfileIntegrationTest'
 }
 
+tasks.register('verifyRegistration', JavaExec) {
+    group = 'verification'
+    description = 'Verifica cadastro, validações e login da nova conta com o banco local.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'br.saep.estoque.RegistrationIntegrationTest'
+}
+
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
     options.release = 11

@@ -183,6 +183,29 @@ public final class Store {
         }
     }
 
+    public void register(String name, String login, char[] password) throws Exception {
+        if (name == null || name.trim().isEmpty() || name.trim().length() > 100)
+            throw new IllegalArgumentException("Nome deve ter entre 1 e 100 caracteres.");
+        if (login == null || !login.trim().matches("[A-Za-z0-9._-]{3,50}"))
+            throw new IllegalArgumentException("Usuário deve ter de 3 a 50 caracteres: letras, números, ponto, hífen ou sublinhado.");
+        if (password == null || password.length < 8 || password.length > 128)
+            throw new IllegalArgumentException("A senha deve ter entre 8 e 128 caracteres.");
+        byte[] salt = new byte[16]; new SecureRandom().nextBytes(salt);
+        PBEKeySpec spec = new PBEKeySpec(password, salt, 120000, 256);
+        byte[] hash;
+        try { hash = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).getEncoded(); }
+        finally { spec.clearPassword(); }
+        try (Connection c = connect(); PreparedStatement p = c.prepareStatement(
+                "INSERT INTO usuarios (nome, login, senha_hash, perfil) VALUES (?, ?, ?, 'OPERADOR')")) {
+            p.setString(1, name.trim()); p.setString(2, login.trim());
+            p.setString(3, toHex(salt) + ":" + toHex(hash));
+            p.executeUpdate();
+        } catch (SQLException e) {
+            if (e.getErrorCode() == 1062) throw new IllegalArgumentException("Este usuário já está cadastrado. Escolha outro nome de usuário.");
+            throw e;
+        } finally { Arrays.fill(hash, (byte)0); }
+    }
+
     public User authenticate(String login, char[] password) throws Exception {
         if (login == null || login.trim().isEmpty() || password.length == 0)
             throw new IllegalArgumentException("Informe usuário e senha.");
